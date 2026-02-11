@@ -265,11 +265,46 @@
       dx /= mag;
       dy /= mag;
 
-      let newLeft = (b.left - z.left) + dx * 150;
-      let newTop  = (b.top - z.top) + dy * 150;
+      const escapeDist = Math.max(120, z.width * 0.22);
+      let newLeft = (b.left - z.left) + dx * escapeDist;
+      let newTop  = (b.top - z.top) + dy * escapeDist;
 
       newLeft = clamp(newLeft, 0, z.width - b.width);
       newTop  = clamp(newTop, 0, z.height - b.height);
+
+      // Prevent overlapping the Yes button on small / touch screens
+      const y = yesBtn.getBoundingClientRect();
+      const yesCenterX = (y.left - z.left) + y.width / 2;
+      const yesCenterY = (y.top - z.top) + y.height / 2;
+      const candCenterX = newLeft + b.width / 2;
+      const candCenterY = newTop + b.height / 2;
+      const minSep = (b.width + y.width) / 2 + 8;
+
+      let dist = Math.hypot(candCenterX - yesCenterX, candCenterY - yesCenterY);
+      if (dist < minSep) {
+        // push candidate away from the Yes center until the minimum separation is reached
+        let vx = candCenterX - yesCenterX || 1;
+        let vy = candCenterY - yesCenterY || 0;
+        const vmag = Math.hypot(vx, vy) || 1;
+        vx /= vmag; vy /= vmag;
+        let targetCenterX = yesCenterX + vx * minSep;
+        let targetCenterY = yesCenterY + vy * minSep;
+
+        // If target goes out of bounds, flip direction and try the opposite side
+        if (
+          targetCenterX - b.width / 2 < 0 ||
+          targetCenterX + b.width / 2 > z.width ||
+          targetCenterY - b.height / 2 < 0 ||
+          targetCenterY + b.height / 2 > z.height
+        ) {
+          vx = -vx; vy = -vy;
+          targetCenterX = yesCenterX + vx * minSep;
+          targetCenterY = yesCenterY + vy * minSep;
+        }
+
+        newLeft = clamp(targetCenterX - b.width / 2, 0, z.width - b.width);
+        newTop = clamp(targetCenterY - b.height / 2, 0, z.height - b.height);
+      }
 
       noBtn.style.left = newLeft + "px";
       noBtn.style.top = newTop + "px";
@@ -278,6 +313,7 @@
       growYes();
     }
 
+    // Pointer support (desktop & browsers that implement pointer events)
     zone.addEventListener("pointermove", e => {
       const b = noBtn.getBoundingClientRect();
       const d = Math.hypot(
@@ -286,6 +322,36 @@
       );
       if (d < 140) moveNo(e.clientX, e.clientY);
     });
+
+    // Touch support for mobile browsers that don't fully support pointer events.
+    // Use passive:false so we can prevent scrolling while interacting.
+    zone.addEventListener("touchstart", e => {
+      if (!e.touches || e.touches.length === 0) return;
+      const t = e.touches[0];
+      const b = noBtn.getBoundingClientRect();
+      const d = Math.hypot(
+        (b.left + b.width / 2) - t.clientX,
+        (b.top + b.height / 2) - t.clientY
+      );
+      if (d < 140) {
+        e.preventDefault();
+        moveNo(t.clientX, t.clientY);
+      }
+    }, { passive: false });
+
+    zone.addEventListener("touchmove", e => {
+      if (!e.touches || e.touches.length === 0) return;
+      const t = e.touches[0];
+      const b = noBtn.getBoundingClientRect();
+      const d = Math.hypot(
+        (b.left + b.width / 2) - t.clientX,
+        (b.top + b.height / 2) - t.clientY
+      );
+      if (d < 140) {
+        e.preventDefault();
+        moveNo(t.clientX, t.clientY);
+      }
+    }, { passive: false });
 
     noBtn.addEventListener("click", e => e.preventDefault());
 
